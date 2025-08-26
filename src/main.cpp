@@ -25,7 +25,8 @@ enum class MotorState { //setting up all possible states execpt error
 enum class LEDState { //setting up all possible states execpt error
   LEDcomb1,
   LEDcomb2,
-  LEDcomb3
+  LEDcomb3,
+  Error
   };
 
 //keep track of current state and set first state
@@ -40,6 +41,8 @@ bool softstartActive = false;
 unsigned long startTimeRunning = millis();
 unsigned long randomSpinTime = 3000;
 unsigned long stopStartTime = millis();
+unsigned long errorStartTime = 0;
+bool errorActive = false;
 
 boolean SoftstartFunction() {
     static int currentSpeed = 0;
@@ -129,7 +132,19 @@ void loop() {
       break;
   
     default:  //Error state
-      // Your code here
+      if(errorActive = false){
+        errorActive = true;
+        errorStartTime = millis();
+      }
+      
+      LED_State = LEDState::Error;
+      if(millis() - errorStartTime >= 15000){ //after 15 seconds switch to wait state
+        digitalWrite(M_IN1, LOW); //stop motor
+        digitalWrite(M_IN2, LOW);
+      } else {
+        digitalWrite(M_IN1, HIGH); //laat motor gaan
+        digitalWrite(M_IN2, HIGH);
+      }
       break;
   }
 
@@ -145,6 +160,10 @@ void loop() {
 
     case LEDState::LEDcomb3:
       // Your code here
+      break;
+    
+    case LEDState::Error:
+      // Rode snel knipperende lichten
       break;
   }
   
