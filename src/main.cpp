@@ -8,6 +8,10 @@
 #define LED 6
 #define CurrentSensor A5
 
+#define MAX_SPEED 200 //max speed of motor
+#define MS_TOPSPEED 3000 //ms till top speed is reached
+
+
 enum class MotorState { //setting up all possible states execpt error
     M_Wait,
     M_Starting,
@@ -28,9 +32,33 @@ static MotorState M_State = MotorState::M_Wait;
 //keep track of current state and set first state
 static LEDState LED_State = LEDState::LEDcomb1;
 
-void SoftstartFunction(){
+unsigned long softstartStartTime = 0;
+bool softstartActive = false;
 
+boolean SoftstartFunction() {
+    static int currentSpeed = 0;
+    unsigned long now = millis();
 
+    if (!softstartActive) {
+        softstartStartTime = now;
+        currentSpeed = 0;
+        softstartActive = true;
+        // Set motor direction (example: forward)
+        digitalWrite(M_IN1, HIGH);
+        digitalWrite(M_IN2, LOW);
+    }
+
+    unsigned long elapsed = now - softstartStartTime;
+    if (elapsed < MS_TOPSPEED) {
+        // Ramp up speed
+        currentSpeed = map(elapsed, 0, MS_TOPSPEED, 0, MAX_SPEED);
+        analogWrite(M_PWM, currentSpeed);
+        return false; // Not finished yet
+    } else {
+        analogWrite(M_PWM, MAX_SPEED);
+        softstartActive = false;
+        return true; // Finished
+    }
 }
 
 void setup() {
@@ -62,7 +90,10 @@ void loop() {
       break;
 
     case MotorState::M_Starting:
-      SoftstartFunction();
+      if(SoftstartFunction() == true){
+        M_State = MotorState::M_Running;
+        LED_State = LEDState::LEDcomb2;
+      }
 
       break;
   
@@ -75,7 +106,7 @@ void loop() {
       break;
 
     case MotorState::M_Stop:
-      // Your code here
+      LED_State = LEDState::LEDcomb3;
       break;
   
     default:  //Error state
