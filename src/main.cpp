@@ -8,9 +8,11 @@
 #define LED 6
 #define CurrentSensor A5
 
+
+
 #define MAX_SPEED 200 //max speed of motor
 #define MS_TOPSPEED 3000 //ms till top speed is reached
-
+#define THRESHOLD 2 //threshold for current sensor to detect if motor is stopped
 
 enum class MotorState { //setting up all possible states execpt error
     M_Wait,
@@ -34,6 +36,10 @@ static LEDState LED_State = LEDState::LEDcomb1;
 
 unsigned long softstartStartTime = 0;
 bool softstartActive = false;
+
+unsigned long startTimeRunning = millis();
+unsigned long randomSpinTime = 3000;
+unsigned long stopStartTime = millis();
 
 boolean SoftstartFunction() {
     static int currentSpeed = 0;
@@ -69,6 +75,7 @@ void setup() {
   pinMode(LED, OUTPUT);
   Serial.begin(9600);
 
+   // Default to 3 seconds
 
   //start init
 
@@ -93,20 +100,32 @@ void loop() {
       if(SoftstartFunction() == true){
         M_State = MotorState::M_Running;
         LED_State = LEDState::LEDcomb2;
+        startTimeRunning = millis();
+        randomSpinTime = random(1.9, 8.5)*1000; // Random duration between 5 and 15 seconds
       }
 
       break;
   
     case MotorState::M_Running:
-      // Your code here
+      if (millis() - startTimeRunning >= randomSpinTime) { //after 10 seconds switch to next state
+        M_State = MotorState::M_SpinFreely;
+      }
       break;
 
     case MotorState::M_SpinFreely:
-      // Your code here
+      if(CurrentSensor < THRESHOLD){ //if current is below threshold switch to next state
+        M_State = MotorState::M_Stop;
+        stopStartTime = millis();
+      }
       break;
 
     case MotorState::M_Stop:
+      digitalWrite(M_IN1, LOW); //stop motor
+      digitalWrite(M_IN2, LOW);
       LED_State = LEDState::LEDcomb3;
+      if(millis() - stopStartTime >= 2000){ //after 5 seconds switch to wait state
+        M_State = MotorState::M_Wait;
+      }
       break;
   
     default:  //Error state
