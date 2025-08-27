@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
-#define Button 2      //internal pull-up
+#define Button 8      //internal pull-up
 #define M_PWM 3
 #define M_IN1 4
 #define M_IN2 5
@@ -44,6 +44,19 @@ unsigned long stopStartTime = millis();
 unsigned long errorStartTime = 0;
 bool errorActive = false;
 
+float offset = 512.03; // replace by value from calibration above
+float sensitivity = 0.100; // for ACS712-20A. Use 0.185 for 5A or 0.066 for 30A
+float current = 0;
+
+const int sampleCount = 150;
+int samplesTaken = 0;
+float currentSum = 0;
+unsigned long lastSampleTime = 0;
+const unsigned long sampleInterval = 3;  // ms between samples
+float currentAmps = 0;
+
+boolean pressed = false;
+
 boolean SoftstartFunction() {
     static int currentSpeed = 0;
     unsigned long now = millis();
@@ -70,6 +83,38 @@ boolean SoftstartFunction() {
     }
 }
 
+void currentReader(){
+  unsigned long now = millis();
+  
+    // Take a sample every sampleInterval ms
+  if (now - lastSampleTime >= sampleInterval) {
+    lastSampleTime = now;
+    currentSum += analogRead(CurrentSensor);
+    samplesTaken++;
+  }
+
+  // When enough samples gathered, calculate current
+  if (samplesTaken >= sampleCount) {
+    float average = currentSum / sampleCount;
+    float voltage = (average - offset) * (5.0 / 1024.0);
+    currentAmps = voltage / sensitivity;
+
+    Serial.print("Measured current: ");
+    Serial.println(currentAmps, 3);
+
+    // Reset for next batch
+    samplesTaken = 0;
+    currentSum = 0;
+  }
+  if (digitalRead(Button) == LOW && !pressed){
+    Serial.println("Button Pressed");
+    pressed = true;
+    } else if (digitalRead(Button) == HIGH && pressed){
+      Serial.println("Button up");
+      pressed = false;
+    }
+}
+
 void setup() {
   pinMode(Button, INPUT_PULLUP);
   pinMode(M_PWM, OUTPUT);
@@ -91,8 +136,8 @@ void loop() {
   switch(M_State) { //setting the motor states
 
     case MotorState::M_Wait:
-      
-      if(Button == HIGH){
+      Serial.println("In wait state");
+      if(pressed == true){
         M_State = MotorState::M_Starting;
         LED_State = LEDState::LEDcomb1;
       }
@@ -100,6 +145,7 @@ void loop() {
       break;
 
     case MotorState::M_Starting:
+      Serial.println("In starting state");
       if(SoftstartFunction() == true){
         M_State = MotorState::M_Running;
         LED_State = LEDState::LEDcomb2;
@@ -110,12 +156,14 @@ void loop() {
       break;
   
     case MotorState::M_Running:
+      Serial.println("In running state");
       if (millis() - startTimeRunning >= randomSpinTime) { //after 10 seconds switch to next state
         M_State = MotorState::M_SpinFreely;
       }
       break;
 
     case MotorState::M_SpinFreely:
+      Serial.println("In spin freely state");
       if(CurrentSensor < THRESHOLD){ //if current is below threshold switch to next state
         M_State = MotorState::M_Stop;
         stopStartTime = millis();
@@ -123,6 +171,7 @@ void loop() {
       break;
 
     case MotorState::M_Stop:
+      Serial.println("In stop state");
       digitalWrite(M_IN1, LOW); //stop motor
       digitalWrite(M_IN2, LOW);
       LED_State = LEDState::LEDcomb3;
@@ -132,6 +181,7 @@ void loop() {
       break;
   
     default:  //Error state
+      Serial.println("In error state");
       if(errorActive = false){
         errorActive = true;
         errorStartTime = millis();
