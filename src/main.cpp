@@ -35,6 +35,8 @@ static MotorState M_State = MotorState::M_Wait;
 //keep track of current state and set first state
 static LEDState LED_State = LEDState::LEDcomb1;
 
+static int currentSpeed = 0;
+
 unsigned long softstartStartTime = 0;
 bool softstartActive = false;
 
@@ -58,7 +60,6 @@ float currentAmps = 0;
 boolean pressed = false;
 
 boolean SoftstartFunction() {
-    static int currentSpeed = 0;
     unsigned long now = millis();
 
     if (!softstartActive) {
@@ -78,6 +79,31 @@ boolean SoftstartFunction() {
         return false; // Not finished yet
     } else {
         analogWrite(M_PWM, MAX_SPEED);
+        softstartActive = false;
+        return true; // Finished
+    }
+}
+
+boolean softEndFunction() {
+    unsigned long now = millis();
+
+    if (!softstartActive) {
+        softstartStartTime = now;
+        currentSpeed = MAX_SPEED;
+        softstartActive = true;
+        // Set motor direction (example: forward)
+        digitalWrite(M_IN1, HIGH);
+        digitalWrite(M_IN2, LOW);
+    }
+
+    unsigned long elapsed = now - softstartStartTime;
+    if (elapsed < MS_TOPSPEED) {
+        // Ramp up speed
+        currentSpeed = map(elapsed, MS_TOPSPEED, 0, MAX_SPEED,0);
+        analogWrite(M_PWM, currentSpeed);
+        return false; // Not finished yet
+    } else {
+        analogWrite(M_PWM, 0);
         softstartActive = false;
         return true; // Finished
     }
