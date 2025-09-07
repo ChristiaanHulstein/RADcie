@@ -7,16 +7,14 @@
 #define M_IN1 4
 #define M_IN2 5
 #define LED 6
-#define CurrentSensor A5
 
 OneButton button(Button,true);
 
 #define MAX_SPEED 200 //max speed of motor
 #define MS_TOPSPEED 3000 //ms till top speed is reached
 #define MS_TOZERO 2000 //ms to go from top speed to zero
-#define THRESHOLD 2 //threshold for current sensor to detect if motor is stopped
 #define MODES [/*normal*/2,5,1,/*fast*/1,3,0,/*slow*/3,7,2] //array with different modes for random spin time in seconds
-#define SELECTED_MODE 0 //select mode from MODES array
+
 enum class MotorState { //setting up all possible states execpt error
     M_Wait,
     M_Starting,
@@ -51,16 +49,6 @@ unsigned long stopStartTime = millis();
 unsigned long errorStartTime = 0;
 bool errorActive = false;
 
-float offset = 512.03; // replace by value from calibration above
-float sensitivity = 0.100; // for ACS712-20A. Use 0.185 for 5A or 0.066 for 30A
-float current = 0;
-
-const int sampleCount = 150;
-int samplesTaken = 0;
-float currentSum = 0;
-unsigned long lastSampleTime = 0;
-const unsigned long sampleInterval = 3;  // ms between samples
-float currentAmps = 0;
 
 boolean pressed = false;
 
@@ -132,40 +120,20 @@ boolean softEndFunction() {
     return false; // still spinning
     }
 
-void currentReader(){
-  unsigned long now = millis();
-  
-    // Take a sample every sampleInterval ms
-  if (now - lastSampleTime >= sampleInterval) {
-    lastSampleTime = now;
-    currentSum += analogRead(CurrentSensor);
-    samplesTaken++;
-  }
 
-  // When enough samples gathered, calculate current
-  if (samplesTaken >= sampleCount) {
-    float average = currentSum / sampleCount;
-    float voltage = (average - offset) * (5.0 / 1024.0);
-    currentAmps = voltage / sensitivity;
-
-    Serial.print("Measured current: ");
-    Serial.println(currentAmps, 3);
-
-    // Reset for next batch
-    samplesTaken = 0;
-    currentSum = 0;
-  }
-  if (digitalRead(Button) == LOW && !pressed){
-    Serial.println("Button Pressed");
-    pressed = true;
-    } else if (digitalRead(Button) == HIGH && pressed){
-      Serial.println("Button up");
-      pressed = false;
-    }
+void doubleClick(){
+  selectedMode += 1; 
+  Serial.println("doubleClick");
 }
-void doubleClick(){Serial.println("doubleClick");}
-void singleClick(){pressed = true;Serial.println("singleClick");}
-void longClick(){Serial.println("longClick");}
+
+void singleClick(){
+  pressed = true;
+  Serial.println("singleClick");
+}
+
+void longClick(){
+  Serial.println("longClick");
+}
 
 void setup() {
   pinMode(Button, INPUT_PULLUP);
@@ -178,6 +146,7 @@ void setup() {
   button.attachDoubleClick(doubleClick);
   button.attachClick(singleClick);
   button.attachLongPressStop(longClick);
+  int selectedMode = 0 //select mode from MODES array
 
    // Default to 3 seconds
 
@@ -233,7 +202,7 @@ void loop() {
       digitalWrite(M_IN1, LOW); //stop motor
       digitalWrite(M_IN2, LOW);
       LED_State = LEDState::LEDcomb3;
-      if(millis() - stopStartTime >= 3*SELECTED_MODE +3){ //after 2 seconds switch to wait state
+      if(millis() - stopStartTime >= 3*SELECTED_MODE +3){ //after x seconds switch to wait state
         M_State = MotorState::M_Wait;
       }
       break;
