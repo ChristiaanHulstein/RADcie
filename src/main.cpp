@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <FastLED.h>
+#include "OneButton.h"
 
 #define Button 8      //internal pull-up
 #define M_PWM 3
@@ -8,12 +9,13 @@
 #define LED 6
 #define CurrentSensor A5
 
-
+OneButton button(Button,true);
 
 #define MAX_SPEED 200 //max speed of motor
 #define MS_TOPSPEED 3000 //ms till top speed is reached
+#define MS_TOZERO 2000 //ms to go from top speed to zero
 #define THRESHOLD 2 //threshold for current sensor to detect if motor is stopped
-#define MODES [/*normal*/2,5,1,/*fast*/1,3,0,/* slow*/3,7,2] //array with different modes for random spin time in seconds
+#define MODES [/*normal*/2,5,1,/*fast*/1,3,0,/*slow*/3,7,2] //array with different modes for random spin time in seconds
 #define SELECTED_MODE 0 //select mode from MODES array
 enum class MotorState { //setting up all possible states execpt error
     M_Wait,
@@ -37,6 +39,8 @@ static MotorState M_State = MotorState::M_Wait;
 static LEDState LED_State = LEDState::LEDcomb1;
 
 static int currentSpeed = 0;
+int easingMode = 1; // 0=Linear, 1=Quadratic, 2=Cubic, 3=Exponential
+
 
 unsigned long softstartStartTime = 0;
 bool softstartActive = false;
@@ -92,23 +96,41 @@ boolean softEndFunction() {
         softstartStartTime = now;
         currentSpeed = MAX_SPEED;
         softstartActive = true;
-        // Set motor direction (example: forward)
-        digitalWrite(M_IN1, HIGH);
-        digitalWrite(M_IN2, LOW);
     }
 
     unsigned long elapsed = now - softstartStartTime;
-    if (elapsed < MS_TOPSPEED) {
-        // Ramp up speed
-        currentSpeed = map(elapsed, MS_TOPSPEED, 0, MAX_SPEED,0);
-        analogWrite(M_PWM, currentSpeed);
-        return false; // Not finished yet
-    } else {
-        analogWrite(M_PWM, 0);
-        softstartActive = false;
-        return true; // Finished
+    float progress = (float)elapsed / MS_TOZERO;
+    if (progress > 1.0) progress = 1.0;
+
+    // Pick easing function
+    float factor;
+    switch (easingMode) {
+      case 0: // Linear
+        factor = 1.0 - progress;
+        break;
+      case 1: // Quadratic ease-out
+        factor = 1.0 - progress * progress;
+        break;
+      case 2: // Cubic ease-out
+        factor = 1.0 - progress * progress * progress;
+        break;
+      case 3: // Exponential ease-out
+        factor = 1.0 - pow(progress, 5);
+        break;
+      default: // fallback
+        factor = 1.0 - progress;
+        break;
     }
-}
+
+    currentSpeed = (int)(MAX_SPEED * factor);
+    analogWrite(M_PWM, currentSpeed);
+
+    if (progress >= 1.0) {
+        softstartActive = false;
+        return true; // finished
+    }
+    return false; // still spinning
+    }
 
 void currentReader(){
   unsigned long now = millis();
@@ -141,6 +163,9 @@ void currentReader(){
       pressed = false;
     }
 }
+void doubleClick(){Serial.println("doubleClick");}
+void singleClick(){pressed = true;Serial.println("singleClick");}
+void longClick(){Serial.println("longClick");}
 
 void setup() {
   pinMode(Button, INPUT_PULLUP);
@@ -149,6 +174,10 @@ void setup() {
   pinMode(M_IN2, OUTPUT);
   pinMode(LED, OUTPUT);
   Serial.begin(9600);
+
+  button.attachDoubleClick(doubleClick);
+  button.attachClick(singleClick);
+  button.attachLongPressStop(longClick);
 
    // Default to 3 seconds
 
@@ -159,7 +188,7 @@ void setup() {
 }
 
 void loop() {
-  
+  button.tick();
   switch(M_State) { //setting the motor states
 
     case MotorState::M_Wait:
@@ -167,6 +196,7 @@ void loop() {
       if(pressed == true){
         M_State = MotorState::M_Starting;
         LED_State = LEDState::LEDcomb1;
+        pressed == false;
       }
       
       break;
