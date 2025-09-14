@@ -14,7 +14,8 @@ OneButton button(Button,true);
 #define MAX_SPEED 200 //max speed of motor
 #define MS_TOPSPEED 5000 //ms till top speed is reached
 #define MS_TOZERO 10000 //ms to go from top speed to zero
-#define MODES [/*normal*/6,8,1,/*fast*/1,3,0,/*slow*/3,7,2] //array with different modes for random spin time in seconds
+#define spin_low 6000
+#define spin_high 8000
 // 0 = min_random , 1 = max_random , 2 = time in stop mode
 
 enum class MotorState { //setting up all possible states execpt error
@@ -39,8 +40,6 @@ static MotorState M_State = MotorState::M_Wait;
 static LEDState LED_State = LEDState::LEDcomb1;
 
 static int currentSpeed = 0;
-int easingMode = 1; // 0=Linear, 1=Quadratic, 2=Cubic, 3=Exponential
-int selectedMode = 0; //select mode from MODES array
 
 
 unsigned long softstartStartTime = 0;
@@ -95,23 +94,8 @@ boolean softEndFunction() {
 
     // Pick easing function
     float factor;
-    switch (easingMode) {
-      case 0: // Linear
-        factor = 1.0 - progress;
-        break;
-      case 1: // Quadratic ease-out
-        factor = 1.0 - progress * progress;
-        break;
-      case 2: // Cubic ease-out
-        factor = 1.0 - progress * progress * progress;
-        break;
-      case 3: // Exponential ease-out
-        factor = 1.0 - pow(progress, 5);
-        break;
-      default: // fallback
-        factor = 1.0 - progress;
-        break;
-    }
+    factor = 1.0 - progress;
+    
 
     currentSpeed = (int)(MAX_SPEED * factor);
     analogWrite(M_PWM, currentSpeed);
@@ -125,7 +109,6 @@ boolean softEndFunction() {
 
 
 void doubleClick(){
-  easingMode = easingMode + 1; 
   //Serial.println("doubleClick");
 }
 
@@ -230,7 +213,7 @@ void loop() {
         M_State = MotorState::M_Running;
         LED_State = LEDState::LEDcomb2;
         startTimeRunning = millis();
-        randomSpinTime = random((3*selectedMode + 0)*1000, (3*selectedMode +1)*1000); // Random duration between 5 and 15 seconds
+        randomSpinTime = random(spin_low, spin_high); // Random duration between 5 and 15 seconds
       }
 
       break;
@@ -256,7 +239,7 @@ void loop() {
       digitalWrite(M_IN1, LOW); //stop motor
       digitalWrite(M_IN2, LOW);
       LED_State = LEDState::LEDcomb3;
-      if(millis() - stopStartTime >= (3*selectedMode +2)*1000){ //after x seconds switch to wait state
+      if(millis() - stopStartTime >= 2000){ //after x seconds switch to wait state
         M_State = MotorState::M_Wait;
         pressed = false;
       }
